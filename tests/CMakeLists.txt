@@ -1,0 +1,2 @@
+add_executable(ds_read_write_test ds_read_write_test.cpp)
+add_test(NAME ds_read_write_test COMMAND ds_read_write_test)

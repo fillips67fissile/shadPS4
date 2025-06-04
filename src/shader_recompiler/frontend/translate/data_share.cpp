@@ -35,6 +35,8 @@ void Translator::EmitDataShare(const GcnInst& inst) {
         return DS_XOR_B32(inst, false);
     case Opcode::DS_WRITE_B32:
         return DS_WRITE(32, false, false, false, inst);
+    case Opcode::DS_WRITE_B16:
+        return DS_WRITE(16, false, false, false, inst);
     case Opcode::DS_WRITE2_B32:
         return DS_WRITE(32, false, true, false, inst);
     case Opcode::DS_WRITE2ST64_B32:
@@ -73,6 +75,10 @@ void Translator::EmitDataShare(const GcnInst& inst) {
         return DS_WRITE(64, false, true, true, inst);
     case Opcode::DS_READ_B64:
         return DS_READ(64, false, false, false, inst);
+    case Opcode::DS_READ_I16:
+        return DS_READ(16, true, false, false, inst);
+    case Opcode::DS_READ_U16:
+        return DS_READ(16, false, false, false, inst);
     case Opcode::DS_READ2_B64:
         return DS_READ(64, false, true, false, inst);
     case Opcode::DS_READ2ST64_B64:
@@ -218,6 +224,21 @@ void Translator::DS_WRITE(int bit_size, bool is_signed, bool is_pair, bool strid
         const IR::Value data =
             ir.CompositeConstruct(ir.GetVectorReg(data0), ir.GetVectorReg(data0 + 1));
         ir.WriteShared(bit_size, data, addr0);
+    } else if (bit_size == 32) {
+        const IR::U32 addr0 = ir.IAdd(addr, ir.Imm32(offset));
+        ir.WriteShared(32, ir.GetVectorReg(data0), addr0);
+    } else if (bit_size == 16 || bit_size == 8) {
+        const IR::U32 addr0 = ir.IAdd(addr, ir.Imm32(offset));
+        const IR::U32 aligned_addr = ir.BitwiseAnd(addr0, ir.Imm32(~3u));
+        const IR::U32 byte_shift = ir.BitwiseAnd(addr0, ir.Imm32(3u));
+        const IR::U32 shift = ir.ShiftLeftLogical(byte_shift, ir.Imm32(3));
+        const IR::U32 old_word = IR::U32{ir.LoadShared(32, false, aligned_addr)};
+        const u32 mask_val = bit_size == 16 ? 0xFFFFu : 0xFFu;
+        const IR::U32 mask = ir.BitwiseNot(ir.ShiftLeftLogical(ir.Imm32(mask_val), shift));
+        const IR::U32 data_bits = ir.BitwiseAnd(ir.GetVectorReg(data0), ir.Imm32(mask_val));
+        const IR::U32 shifted_data = ir.ShiftLeftLogical(data_bits, shift);
+        const IR::U32 new_word = ir.BitwiseOr(ir.BitwiseAnd(old_word, mask), shifted_data);
+        ir.WriteShared(32, new_word, aligned_addr);
     } else {
         const IR::U32 addr0 = ir.IAdd(addr, ir.Imm32(offset));
         ir.WriteShared(bit_size, ir.GetVectorReg(data0), addr0);
@@ -305,6 +326,15 @@ void Translator::DS_READ(int bit_size, bool is_signed, bool is_pair, bool stride
         const IR::Value data = ir.LoadShared(bit_size, is_signed, addr0);
         ir.SetVectorReg(dst_reg, IR::U32{ir.CompositeExtract(data, 0)});
         ir.SetVectorReg(dst_reg + 1, IR::U32{ir.CompositeExtract(data, 1)});
+    } else if (bit_size == 16 || bit_size == 8) {
+        const IR::U32 addr0 = ir.IAdd(addr, ir.Imm32(offset));
+        const IR::U32 aligned_addr = ir.BitwiseAnd(addr0, ir.Imm32(~3u));
+        const IR::U32 byte_shift = ir.BitwiseAnd(addr0, ir.Imm32(3u));
+        const IR::U32 shift = ir.ShiftLeftLogical(byte_shift, ir.Imm32(3));
+        const IR::U32 word = IR::U32{ir.LoadShared(32, false, aligned_addr)};
+        const IR::U32 extracted =
+            ir.BitFieldExtract(word, shift, ir.Imm32(bit_size), is_signed);
+        ir.SetVectorReg(dst_reg, extracted);
     } else {
         const IR::U32 addr0 = ir.IAdd(addr, ir.Imm32(offset));
         const IR::U32 data = IR::U32{ir.LoadShared(bit_size, is_signed, addr0)};
