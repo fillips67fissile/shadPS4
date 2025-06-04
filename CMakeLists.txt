@@ -1261,6 +1261,9 @@ endif()
 # Install rules
 install(TARGETS shadps4 BUNDLE DESTINATION .)
 
+enable_testing()
+add_subdirectory(tests)
+
 if (ENABLE_QT_GUI AND CMAKE_SYSTEM_NAME STREQUAL "Linux")
     install(FILES "dist/net.shadps4.shadPS4.desktop" DESTINATION "share/applications")
     install(FILES "dist/net.shadps4.shadPS4.metainfo.xml" DESTINATION "share/metainfo")
