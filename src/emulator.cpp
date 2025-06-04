@@ -301,10 +301,18 @@ void Emulator::Run(std::filesystem::path file, const std::vector<std::string> ar
 
         start_time = std::chrono::steady_clock::now();
         const auto user_dir = Common::FS::GetUserPath(Common::FS::PathType::UserDir);
+        std::error_code ec;
+        std::filesystem::create_directories(user_dir, ec);
+        if (ec) {
+            LOG_WARNING(Loader, "Failed to create user directory {}: {}", user_dir.string(),
+                        ec.message());
+        }
         QString filePath = QString::fromStdString((user_dir / "play_time.txt").string());
         QFile file(filePath);
-        ASSERT_MSG(file.open(QIODevice::ReadWrite | QIODevice::Text),
-                   "Error opening or creating play_time.txt");
+        if (!file.open(QIODevice::ReadWrite | QIODevice::Text)) {
+            LOG_WARNING(Loader, "Error opening or creating play_time.txt at {}",
+                        filePath.toStdString());
+        }
     }
 #endif
 
